@@ -36,7 +36,7 @@ let config = InertiaConfig::default().root_view(move |data| {
 
 In the Tera root view, put `{{ inertia_head | safe }}` in `<head>` and `{{ inertia_root | safe }}` in `<body>`. Put production stylesheet and script tags directly in the template. If the template also supports Vite development tags, render `asset_tags` when it is non-empty and use the production tags otherwise. `inertia_root` contains the JSON page script and mount element, plus any SSR body markup. The adapter escapes JSON for a script context, including every forward slash as required by Inertia v3. Without a registered renderer, it uses a minimal document shell. Set `version` from the frontend build manifest. The adapter merges `shared_props` first, then lets page props take precedence. Same-component partial requests select the requested props. A stale-version Inertia GET returns 409 with `X-Inertia-Location`. Mutating Inertia redirects convert 302 to 303.
 
-SSR is off by default. Enable it in the Loco `Hooks::after_routes` setup by setting `InertiaConfig::ssr`. `SsrConfig::url` is the full URL of the Node SSR service's `/render` endpoint, including its host and port. It defaults to `http://127.0.0.1:13714/render`:
+SSR is off by default. Enable it in the Loco `Hooks::after_routes` setup by setting `InertiaConfig::ssr`. `SsrConfig::url` is the full URL of the SSR service's `/render` endpoint, including its host and port. It defaults to `http://127.0.0.1:13714/render`:
 
 ```rust,ignore
 use loco_inertia::{InertiaConfig, InertiaLayer, SsrConfig};
@@ -52,9 +52,11 @@ async fn after_routes(router: axum::Router, _ctx: &AppContext) -> loco_rs::Resul
 }
 ```
 
-Run the Inertia-compatible Node SSR process separately from Loco and set `SsrConfig::url` to an address reachable from the Loco process. For example, use `http://127.0.0.1:13714/render` when both processes share a host, or `http://frontend-ssr:13714/render` when the SSR process is a `frontend-ssr` service on the same container network. In Loco apps, put environment-specific values in the typed app config and use environment interpolation there. The adapter POSTs the Inertia page JSON to this endpoint for full browser visits; the service must return JSON with `head` (an array of HTML strings) and `body` (an HTML string). Inertia JSON visits skip SSR. Renderer errors are logged and fall back to client rendering unless `strict` is enabled, in which case the adapter returns 502. The endpoint is trusted to return HTML fragments.
+Run an Inertia-compatible SSR service separately from Loco and set `SsrConfig::url` to an address reachable from the Loco process. The [inertia-rs-ssr V8 renderer](https://github.com/WalrusSoup/inertia-rs-ssr) is a Rust service that loads the Vite SSR bundle directly; it does not start Node. Build the frontend bundle, then run the renderer with the bundle path and `--debug` to see each page it renders. Setup commands for the sample app are in [`examples/loco-rs-test/README.md`](examples/loco-rs-test/README.md).
 
-To avoid waiting on a stopped SSR service during a browser visit, configure `status_url` to a readiness endpoint. The layer polls it in a background task (every second by default, with a 250 ms probe timeout). A 2xx response marks SSR ready; when it is unavailable, browser visits immediately use client rendering (or return 502 in strict mode). Ready services still receive one `/render` request per full browser visit, since each page needs its own HTML. Leave `status_url` unset for SSR services that do not expose a readiness endpoint; those retain the request-driven behavior. The example Node server does not include a status route, so this option is for SSR services that provide one.
+The adapter POSTs Inertia page JSON to `/render` for full browser visits; the service must return JSON with `head` (an array of HTML strings) and `body` (an HTML string). Inertia JSON visits skip SSR. Renderer errors are logged and fall back to client rendering unless `strict` is enabled, in which case the adapter returns 502. The endpoint is trusted to return HTML fragments.
+
+To avoid waiting on a stopped SSR service during a browser visit, configure `status_url` to a readiness endpoint. The layer polls it in a background task (every second by default, with a 250 ms probe timeout). A 2xx response marks SSR ready; when it is unavailable, browser visits immediately use client rendering (or return 502 in strict mode). Ready services still receive one `/render` request per full browser visit, since each page needs its own HTML. Leave `status_url` unset for SSR services that do not expose a readiness endpoint; those retain the request-driven behavior. The Rust V8 renderer exposes `GET /status` for readiness checks.
 
 For Vite development, set `InertiaConfig::vite_dev_server` to a `ViteDevConfig`. The library reads the Vite hot file, checks the recorded server URL, and generates the Vite client and entry tags. React projects can opt into the React Fast Refresh preamble with `.react_refresh()`; other framework plugins can use the generic Vite client and their own entry without React-specific code. If Vite is unavailable it uses `asset_tags` from `InertiaConfig`; with a root template, put production tags there instead:
 
@@ -70,7 +72,7 @@ config.vite_dev_server = Some(ViteDevConfig::new(
 
 Vite must write its resolved URL to the configured hot file. The [example's Vite config](examples/loco-rs-test/frontend/vite.config.js) includes a plugin that records the URL and removes the file when Vite stops. If Vite's preferred port is occupied, the plugin records the port Vite selected. The library checks the hot file on each full-page response, so Vite can start or stop while Loco runs. Use `ViteDevConfig::server_url` to set a different URL when the browser cannot reach the recorded one. The example keeps production asset URLs in its Tera root template; no asset-tag string is needed in Rust configuration.
 
-The [`examples/loco-rs-test`](examples/loco-rs-test) app includes a React SSR entry point and scripts to build and run the Node process. See its README for the commands.
+The [`examples/loco-rs-test`](examples/loco-rs-test) app includes a React SSR entry point and Vite configuration for the Rust V8 renderer. See its README for build, run, and verification commands.
 
 ## Page directives
 
