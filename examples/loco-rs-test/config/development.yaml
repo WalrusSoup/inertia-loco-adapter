@@ -1,0 +1,32 @@
+logger:
+  enable: true
+  pretty_backtrace: true
+  level: debug
+  format: compact
+server:
+  binding: 127.0.0.1
+  port: 5150
+  host: http://localhost
+  middlewares:
+    static:
+      enable: true
+      must_exist: true
+      folder:
+        uri: /assets
+        path: static/assets
+      fallback: static/404.html
+database:
+  uri: sqlite://dbz.sqlite3?mode=rwc
+  enable_logging: false
+  connect_timeout: 500
+  idle_timeout: 500
+  min_connections: 1
+  max_connections: 1
+  auto_migrate: true
+  dangerously_truncate: false
+  dangerously_recreate: false
+workers:
+  mode: ForegroundBlocking
+settings:
+  inertia_ssr_url: <%= get_env(name="INERTIA_SSR_URL", default="http://127.0.0.1:13714/render") %>
+  inertia_vite_dev_server: <%= get_env(name="INERTIA_VITE_DEV_SERVER", default="") %>

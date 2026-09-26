@@ -1,0 +1,8 @@
+[package]
+name = "sample-migration"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+loco-rs = { version = "1.2", default-features = false, features = ["with-db"] }
+sea-orm-migration = "2.0"

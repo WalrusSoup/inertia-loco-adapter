@@ -1,0 +1,53 @@
+[package]
+name = "loco-inertia"
+version = "0.0.1"
+edition = "2021"
+rust-version = "1.94"
+description = "Inertia.js adapter for Loco.rs"
+license = "MIT OR Apache-2.0"
+documentation = "https://docs.rs/loco-inertia"
+keywords = ["inertia", "loco", "axum"]
+categories = ["web-programming", "web-programming::http-server"]
+exclude = ["docs/**", "examples/**"]
+
+[features]
+default = ["loco"]
+loco = ["dep:loco-rs", "loco-rs/with-db"]
+
+[dependencies]
+axum = "0.8"
+http = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tracing = "0.1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+tokio = { version = "1", features = ["fs", "time"] }
+loco-rs = { version = "1.2", default-features = false, optional = true }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+tower = { version = "0.5", features = ["util"] }
+
+[lints.rust]
+missing_debug_implementations = "warn"
+redundant_imports = "warn"
+redundant_lifetimes = "warn"
+trivial_numeric_casts = "warn"
+unsafe_op_in_unsafe_fn = "warn"
+unused_lifetimes = "warn"
+
+[lints.clippy]
+cargo = { level = "warn", priority = -1 }
+# Dependency version analysis also needs registry sources outside the
+# filesystem sandbox. Re-enable cargo_common_metadata once the repository URL
+# and copyright details are supplied.
+cargo_common_metadata = "allow"
+multiple_crate_versions = "allow"
+complexity = { level = "warn", priority = -1 }
+correctness = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+perf = { level = "warn", priority = -1 }
+style = { level = "warn", priority = -1 }
+suspicious = { level = "warn", priority = -1 }
+
