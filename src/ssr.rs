@@ -174,7 +174,6 @@ pub(crate) async fn render(
 mod tests {
     use super::*;
     use axum::{routing::post, Router};
-    use std::sync::Arc;
     use tokio::sync::oneshot;
 
     async fn mock_server(

@@ -40,9 +40,7 @@ impl InertiaLayer {
         let ssr_client = ssr::client().map_err(|err| err.to_string());
         let config = Arc::new(config);
         let ssr_status = config.ssr.as_ref().and_then(|ssr_config| {
-            if ssr_config.status_url.is_none() {
-                return None;
-            }
+            ssr_config.status_url.as_ref()?;
 
             match &ssr_client {
                 Ok(client) => ssr::monitor(ssr_config, client),
@@ -668,7 +666,7 @@ mod tests {
     use serde_json::json;
     use std::{
         future::Future,
-        sync::atomic::{AtomicUsize, Ordering},
+        sync::atomic::AtomicUsize,
         task::{Context, Poll, Waker},
     };
 
