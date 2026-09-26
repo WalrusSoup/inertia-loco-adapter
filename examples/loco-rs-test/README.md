@@ -1,6 +1,6 @@
 # Loco Inertia DBZ sample
 
-This Loco app is an integration example for `loco-inertia`. It uses Loco's SeaORM integration with a SQLite database and a migration for the DBZ characters. The React pages under `frontend/pages/Characters/` exercise nested data and lists. The `/episodes` page shows an Inertia infinite-scroll episode table. The app's Tera root document is `assets/views/inertia/root.html` and receives `inertia_root` and `inertia_head` values from the adapter.
+This Loco app is an integration example for `loco-inertia`. It uses Loco's SeaORM integration with a SQLite database and a migration for the DBZ characters. The React pages under `frontend/pages/Characters/` exercise nested data and lists. The `/episodes` page shows an Inertia infinite-scroll episode table. The app's Tera root document is `assets/views/inertia/root.html`; it contains the production CSS and JavaScript tags and uses adapter-provided tags when Vite is running.
 
 Run `cargo run -- db seed` once, then `cargo run -- start`, from this folder. The included development config binds port 5150 and uses the local SQLite file `dbz.sqlite3`. The app follows Loco's normal structure: hooks in `src/app.rs`, Loco `Routes` in `src/controllers/`, SeaORM entities and model queries in `src/models/`, response DTOs in `src/views/`, and schema changes in the migration crate. It registers `InertiaLayer` in `Hooks::after_routes` so the Loco router can keep managing the application routes and middleware.
 

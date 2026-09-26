@@ -8,12 +8,19 @@ use axum::{
 };
 use http::{header, HeaderValue, StatusCode};
 use serde_json::{Map, Value};
-use std::{collections::HashSet, sync::Arc};
+use std::{
+    collections::HashSet,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+};
 
 #[derive(Clone)]
 struct InertiaState {
     config: Arc<InertiaConfig>,
     ssr_client: Result<reqwest::Client, String>,
+    ssr_status: Option<Arc<AtomicBool>>,
 }
 
 /// Axum layer that finalizes [`InertiaResponse`] values after handlers run.
@@ -31,9 +38,21 @@ impl InertiaLayer {
     #[must_use]
     pub fn new(config: InertiaConfig) -> Self {
         let ssr_client = ssr::client().map_err(|err| err.to_string());
+        let config = Arc::new(config);
+        let ssr_status = config.ssr.as_ref().and_then(|ssr_config| {
+            if ssr_config.status_url.is_none() {
+                return None;
+            }
+
+            match &ssr_client {
+                Ok(client) => ssr::monitor(ssr_config, client),
+                Err(_) => Some(Arc::new(AtomicBool::new(false))),
+            }
+        });
         Self(Arc::new(InertiaState {
-            config: Arc::new(config),
+            config,
             ssr_client,
+            ssr_status,
         }))
     }
     /// Add Inertia finalization middleware to a router.
@@ -515,29 +534,48 @@ fn inertia_response(mut response: Response, page: &Page) -> Response {
 }
 
 async fn browser_response(mut response: Response, page: &Page, state: &InertiaState) -> Response {
-    let ssr_result = match &state.config.ssr {
-        Some(ssr_config) => match state.ssr_client.as_ref() {
-            Ok(client) => match ssr::render(client, ssr_config, page).await {
-                Ok(result) => Some(result),
+    let monitored_down = state
+        .ssr_status
+        .as_ref()
+        .is_some_and(|status| !status.load(Ordering::Acquire));
+    let ssr_result = if monitored_down {
+        if state
+            .config
+            .ssr
+            .as_ref()
+            .is_some_and(|config| config.strict)
+        {
+            return StatusCode::BAD_GATEWAY.into_response();
+        }
+        None
+    } else {
+        match &state.config.ssr {
+            Some(ssr_config) => match state.ssr_client.as_ref() {
+                Ok(client) => match ssr::render(client, ssr_config, page).await {
+                    Ok(result) => Some(result),
+                    Err(err) => {
+                        if let Some(status) = &state.ssr_status {
+                            status.store(false, Ordering::Release);
+                        }
+                        if ssr_config.strict {
+                            tracing::warn!(component = %page.component, error = %err, "Inertia SSR failed");
+                            return StatusCode::BAD_GATEWAY.into_response();
+                        }
+                        tracing::warn!(component = %page.component, error = %err, "Inertia SSR failed; using client rendering");
+                        None
+                    }
+                },
                 Err(err) if ssr_config.strict => {
-                    tracing::warn!(component = %page.component, error = %err, "Inertia SSR failed");
+                    tracing::warn!(component = %page.component, error = %err, "Inertia SSR client unavailable");
                     return StatusCode::BAD_GATEWAY.into_response();
                 }
                 Err(err) => {
-                    tracing::warn!(component = %page.component, error = %err, "Inertia SSR failed; using client rendering");
+                    tracing::warn!(component = %page.component, error = %err, "Inertia SSR client unavailable; using client rendering");
                     None
                 }
             },
-            Err(err) if ssr_config.strict => {
-                tracing::warn!(component = %page.component, error = %err, "Inertia SSR client unavailable");
-                return StatusCode::BAD_GATEWAY.into_response();
-            }
-            Err(err) => {
-                tracing::warn!(component = %page.component, error = %err, "Inertia SSR client unavailable; using client rendering");
-                None
-            }
-        },
-        None => None,
+            None => None,
+        }
     };
     let root_data = match html::root_data(
         page,
@@ -664,6 +702,7 @@ mod tests {
         InertiaState {
             config: Arc::new(InertiaConfig::default()),
             ssr_client: Err("unused in these tests".into()),
+            ssr_status: None,
         }
     }
 

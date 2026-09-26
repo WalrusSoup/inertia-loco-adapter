@@ -1,6 +1,12 @@
 use crate::Page;
 use serde::Deserialize;
-use std::time::Duration;
+use std::{
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
 
 /// HTTP settings for the official Inertia `/render` service.
 ///
@@ -12,6 +18,13 @@ use std::time::Duration;
 pub struct SsrConfig {
     /// Full HTTP URL of the SSR `/render` endpoint.
     pub url: String,
+    /// Optional readiness URL polled in the background. When configured,
+    /// browser requests skip SSR while this endpoint is unavailable.
+    pub status_url: Option<String>,
+    /// Delay between background readiness checks.
+    pub status_poll_interval: Duration,
+    /// Maximum time allowed for each readiness check.
+    pub status_timeout: Duration,
     /// Maximum time allowed for the request and response body.
     pub timeout: Duration,
     /// Maximum accepted response body size in bytes.
@@ -24,6 +37,9 @@ impl std::fmt::Debug for SsrConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("SsrConfig")
             .field("url_configured", &!self.url.is_empty())
+            .field("status_url_configured", &self.status_url.is_some())
+            .field("status_poll_interval", &self.status_poll_interval)
+            .field("status_timeout", &self.status_timeout)
             .field("timeout", &self.timeout)
             .field("max_response_bytes", &self.max_response_bytes)
             .field("strict", &self.strict)
@@ -34,6 +50,9 @@ impl Default for SsrConfig {
     fn default() -> Self {
         Self {
             url: "http://127.0.0.1:13714/render".into(),
+            status_url: None,
+            status_poll_interval: Duration::from_secs(1),
+            status_timeout: Duration::from_millis(250),
             timeout: Duration::from_secs(2),
             max_response_bytes: 2 * 1024 * 1024,
             strict: false,
@@ -76,6 +95,49 @@ pub(crate) fn client() -> Result<reqwest::Client, SsrError> {
     reqwest::Client::builder()
         .build()
         .map_err(|err| SsrError::Client(err.to_string()))
+}
+
+pub(crate) fn monitor(config: &SsrConfig, client: &reqwest::Client) -> Option<Arc<AtomicBool>> {
+    let url = config.status_url.as_ref()?.clone();
+    let available = Arc::new(AtomicBool::new(false));
+    let state = Arc::clone(&available);
+    let client = client.clone();
+    let interval = config.status_poll_interval.max(Duration::from_millis(50));
+    let timeout = config.status_timeout;
+
+    let Ok(runtime) = tokio::runtime::Handle::try_current() else {
+        tracing::warn!(
+            status_url = %url,
+            "Inertia SSR status monitoring requires an active Tokio runtime; monitoring is disabled"
+        );
+        return None;
+    };
+
+    runtime.spawn(async move {
+        let mut previous = None;
+        loop {
+            let healthy = client
+                .get(&url)
+                .timeout(timeout)
+                .send()
+                .await
+                .is_ok_and(|response| response.status().is_success());
+            state.store(healthy, Ordering::Release);
+
+            if previous != Some(healthy) {
+                if healthy {
+                    tracing::info!(status_url = %url, "Inertia SSR service is ready");
+                } else {
+                    tracing::warn!(status_url = %url, "Inertia SSR service is unavailable");
+                }
+                previous = Some(healthy);
+            }
+
+            tokio::time::sleep(interval).await;
+        }
+    });
+
+    Some(available)
 }
 
 pub(crate) async fn render(

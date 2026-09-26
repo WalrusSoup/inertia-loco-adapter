@@ -150,7 +150,6 @@ impl Hooks for App {
             vite = vite.server_url(url);
         }
         config.vite_dev_server = Some(vite);
-        config.asset_tags = "<link rel=\"stylesheet\" href=\"/assets/app.css\"><script type=\"module\" src=\"/assets/app.js\"></script>".into();
         config.ssr = Some(SsrConfig {
             url: settings.inertia_ssr_url,
             ..SsrConfig::default()

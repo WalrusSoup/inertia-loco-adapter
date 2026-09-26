@@ -49,6 +49,7 @@ export default defineConfig(({ isSsrBuild }) => ({
     host: '127.0.0.1',
     port: 5173,
   },
+  ssr: isSsrBuild ? { target: 'webworker', noExternal: true } : undefined,
   build: {
     outDir: isSsrBuild ? 'ssr-dist' : '../static/assets',
     emptyOutDir: true,
@@ -57,8 +58,12 @@ export default defineConfig(({ isSsrBuild }) => ({
       output: {
         entryFileNames: isSsrBuild ? 'ssr.js' : 'app.js',
         assetFileNames: '[name][extname]',
+        format: 'es',
+        inlineDynamicImports: isSsrBuild || undefined,
       },
     },
   },
 }))
+
+
 

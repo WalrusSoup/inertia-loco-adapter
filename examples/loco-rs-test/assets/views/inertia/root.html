@@ -4,7 +4,12 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     {{ inertia_head | safe }}
-    {{ asset_tags | safe }}
+    {% if asset_tags %}
+      {{ asset_tags | safe }}
+    {% else %}
+      <link rel="stylesheet" href="/assets/app.css">
+      <script type="module" src="/assets/app.js"></script>
+    {% endif %}
   </head>
   <body>
     {{ inertia_root | safe }}
